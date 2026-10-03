@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>어린이 뽀모도로 타이머</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* 기본 테마 및 드래그 방지 */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #f3f4f6;
+            user-select: none;
+        }
+
+        /* 주요 버튼 스타일 */
+        .btn {
+            padding: 0.75rem 2rem;
+            font-size: 1.125rem;
+            font-weight: 700;
+            border-radius: 9999px;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-start {
+            background-color: #ef4444;
+            color: white;
+        }
+        .btn-start:hover {
+            background-color: #dc2626;
+        }
+
+        .btn-pause {
+            background-color: #f59e0b;
+            color: white;
+        }
+        .btn-pause:hover {
+            background-color: #d97706;
+        }
+
+        .btn-reset {
+            background-color: #9ca3af;
+            color: white;
+        }
+        .btn-reset:hover {
+            background-color: #6b7280;
+        }
+
+        /* 시간 조절 (+, -) 버튼 스타일 */
+        .adjust-btn {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            background-color: #f3f4f6;
+            color: #374151;
+            font-weight: bold;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        .adjust-btn:hover {
+            background-color: #e5e7eb;
+        }
+
+        /* 숫자 입력창 화살표(스피너) 제거 */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-xl max-w-sm w-full flex flex-col items-center">
+        <!-- 타이머 제목 -->
+        <h1 class="text-2xl font-bold text-gray-800 mb-4 text-center">어린이 뽀모도로 타이머</h1>
+
+        <!-- 캔버스 (시각적 시계 및 중앙 전자시계) -->
+        <div class="relative flex items-center justify-center my-2">
+            <canvas id="timerCanvas" width="320" height="320" class="max-w-full h-auto"></canvas>
+        </div>
+
+        <!-- 동작 제어 버튼 (시작 / 일시정지 / 초기화) -->
+        <div class="flex gap-3 justify-center my-6">
+            <button class="btn btn-start" id="start-btn" onclick="startTimer()">시작</button>
+            <button class="btn btn-pause" id="pause-btn" onclick="pauseTimer()" style="display: none;">정지</button>
+            <button class="btn btn-reset" id="reset-btn" onclick="resetTimer()">초기화</button>
+        </div>
+
+        <!-- 타이머 시간 설정 부분 -->
+        <div class="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col items-center gap-2 w-full">
+            <div class="text-gray-600 text-sm font-semibold">타이머 시간 설정</div>
+            
+            <!-- 분 단위 조절 및 입력 -->
+            <div class="flex items-center gap-3 my-1">
+                <button class="adjust-btn" onclick="changeTime(-1)">-</button>
+                <div class="flex items-center gap-1">
+                    <input type="number" id="custom-minutes" value="45" min="1" max="60" 
+                           class="w-16 text-center text-xl font-bold border-2 border-gray-300 rounded-lg p-1.5 outline-none focus:border-red-500 bg-white"
+                           onchange="onCustomInputChange()">
+                    <span class="text-gray-700 font-bold text-lg">분</span>
+                </div>
+                <button class="adjust-btn" onclick="changeTime(1)">+</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 전역 변수 선언
+        let timerInterval = null;
+        let isRunning = false;
+        let selectedMinutes = 45;
+        let timeLeft = 45 * 60;
+
+        // DOM 요소 참조
+        let canvas = null;
+        let ctx = null;
+        let startBtn = null;
+        let pauseBtn = null;
+        let customInput = null;
+
+        // Web Audio API 오디오 컨텍스트
+        let audioCtx = null;
+
+        /**
+         * 타이머 종료 시 알람 소리 재생 (도-미-솔-도)
+         */
+        function playAlarmSound() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const now = audioCtx.currentTime;
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.18);
+
+                    gain.gain.setValueAtTime(0, now + idx * 0.18);
+                    gain.gain.linearRampToValueAtTime(0.3, now + idx * 0.18 + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.18 + 0.4);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    osc.start(now + idx * 0.18);
+                    osc.stop(now + idx * 0.18 + 0.45);
+                });
+            } catch (e) {
+                console.error("Audio playback failed:", e);
+            }
+        }
+
+        /**
+         * 캔버스에 시계 판 및 남은 시간(빨간 영역), 중앙 전자시계 그리기
+         */
+        function drawClockFace() {
+            if (!canvas || !ctx) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const width = 320;
+            const height = 320;
+
+            if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
+                canvas.style.width = `${width}px`;
+                canvas.style.height = `${height}px`;
+            }
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, width, height);
+
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = 115;
+
+            // 1. 흰색 바탕 원형 시계판
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            // 2. 빨간색 남은 시간 영역 (12시 방향부터 시계방향 채움)
+            const fraction = Math.max(0, Math.min(1, timeLeft / 3600));
+            const sweepAngle = fraction * 2 * Math.PI;
+
+            if (sweepAngle > 0) {
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, -Math.PI / 2, -Math.PI / 2 + sweepAngle, false);
+                ctx.closePath();
+                ctx.fillStyle = '#E53E3E'; // 신인성 명확한 빨간색
+                ctx.fill();
+            }
+
+            // 3. 시계 눈금 및 숫자 (0, 5, 10, ... 55)
+            const tickRadiusOuter = radius + 6;
+            const tickRadiusInnerShort = radius + 1;
+            const tickRadiusInnerLong = radius - 5;
+
+            ctx.strokeStyle = '#666666';
+            ctx.fillStyle = '#555555';
+            ctx.font = '500 13px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            for (let i = 0; i < 60; i++) {
+                const angle = (i * 6 * Math.PI) / 180 - Math.PI / 2;
+                const isMajor = i % 5 === 0;
+
+                const innerR = isMajor ? tickRadiusInnerLong : tickRadiusInnerShort;
+                const outerR = tickRadiusOuter;
+
+                const x1 = centerX + Math.cos(angle) * innerR;
+                const y1 = centerY + Math.sin(angle) * innerR;
+                const x2 = centerX + Math.cos(angle) * outerR;
+                const y2 = centerY + Math.sin(angle) * outerR;
+
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.lineWidth = isMajor ? 2 : 1;
+                ctx.stroke();
+
+                if (isMajor) {
+                    const numRadius = radius + 22;
+                    const nx = centerX + Math.cos(angle) * numRadius;
+                    const ny = centerY + Math.sin(angle) * numRadius;
+                    ctx.fillText(i.toString(), nx, ny);
+                }
+            }
+
+            // 4. 중앙 전자시계 (MM:SS)
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+            const boxWidth = 110;
+            const boxHeight = 44;
+            const boxX = centerX - boxWidth / 2;
+            const boxY = centerY - boxHeight / 2;
+            const cornerRadius = 8;
+
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(boxX, boxY, boxWidth, boxHeight, cornerRadius);
+            } else {
+                ctx.rect(boxX, boxY, boxWidth, boxHeight);
+            }
+            ctx.fillStyle = 'rgba(180, 40, 40, 0.85)';
+            ctx.fill();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 24px system-ui, -apple-system, sans-serif';
+            ctx.fillText(formattedTime, centerX, centerY + 1);
+
+            ctx.restore();
+        }
+
+        /**
+         * 화면 업데이트
+         */
+        function updateDisplay() {
+            drawClockFace();
+        }
+
+        /**
+         * 타이머 시작
+         */
+        function startTimer() {
+            if (isRunning) return;
+
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isRunning = true;
+            startBtn.style.display = 'none';
+            pauseBtn.style.display = 'inline-block';
+
+            timerInterval = setInterval(() => {
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    updateDisplay();
+                } else {
+                    clearInterval(timerInterval);
+                    isRunning = false;
+                    startBtn.style.display = 'inline-block';
+                    startBtn.textContent = '시작';
+                    pauseBtn.style.display = 'none';
+                    playAlarmSound();
+                }
+            }, 1000);
+        }
+
+        /**
+         * 타이머 일시정지
+         */
+        function pauseTimer() {
+            if (!isRunning) return;
+            clearInterval(timerInterval);
+            isRunning = false;
+            startBtn.style.display = 'inline-block';
+            startBtn.textContent = '이어서';
+            pauseBtn.style.display = 'none';
+        }
+
+        /**
+         * 타이머 초기화
+         */
+        function resetTimer() {
+            clearInterval(timerInterval);
+            isRunning = false;
+            timeLeft = selectedMinutes * 60;
+            startBtn.style.display = 'inline-block';
+            startBtn.textContent = '시작';
+            pauseBtn.style.display = 'none';
+            updateDisplay();
+        }
+
+        /**
+         * 시간이 +, - 버튼으로 변경될 때
+         */
+        function changeTime(delta) {
+            let newMins = parseInt(customInput.value) + delta;
+            if (isNaN(newMins) || newMins < 1) newMins = 1;
+            if (newMins > 60) newMins = 60;
+
+            selectedMinutes = newMins;
+            customInput.value = newMins;
+            resetTimer();
+        }
+
+        /**
+         * 입력창에 직접 숫자를 입력했을 때
+         */
+        function onCustomInputChange() {
+            let val = parseInt(customInput.value);
+            if (isNaN(val) || val < 1) val = 1;
+            if (val > 60) val = 60;
+
+            selectedMinutes = val;
+            customInput.value = val;
+            resetTimer();
+        }
+
+        // 페이지 로드 시 DOM 요소 바인딩 및 초기 시계 그리기
+        window.onload = function() {
+            canvas = document.getElementById('timerCanvas');
+            ctx = canvas ? canvas.getContext('2d') : null;
+            startBtn = document.getElementById('start-btn');
+            pauseBtn = document.getElementById('pause-btn');
+            customInput = document.getElementById('custom-minutes');
+
+            drawClockFace();
+            updateDisplay();
+        };
+    </script>
+</body>
+</html>
