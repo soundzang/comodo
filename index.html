@@ -8,14 +8,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        /* 기본 테마 및 드래그 방지 */
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background-color: #f3f4f6;
             user-select: none;
         }
 
-        /* 주요 버튼 스타일 */
         .btn {
             padding: 0.75rem 2rem;
             font-size: 1.125rem;
@@ -54,7 +52,6 @@
             background-color: #6b7280;
         }
 
-        /* 시간 조절 (+, -) 버튼 스타일 */
         .adjust-btn {
             width: 2.5rem;
             height: 2.5rem;
@@ -72,7 +69,6 @@
             background-color: #e5e7eb;
         }
 
-        /* 숫자 입력창 화살표(스피너) 제거 */
         input::-webkit-outer-spin-button,
         input::-webkit-inner-spin-button {
             -webkit-appearance: none;
@@ -86,26 +82,17 @@
 <body class="min-h-screen flex items-center justify-center p-4">
 
     <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-xl max-w-sm w-full flex flex-col items-center">
-        <!-- 타이머 제목 -->
         <h1 class="text-2xl font-bold text-gray-800 mb-4 text-center">어린이 뽀모도로 타이머</h1>
-
-        <!-- 캔버스 (시각적 시계 및 중앙 전자시계) -->
         <div class="relative flex items-center justify-center my-2">
             <canvas id="timerCanvas" width="320" height="320" class="max-w-full h-auto"></canvas>
         </div>
-
-        <!-- 동작 제어 버튼 (시작 / 일시정지 / 초기화) -->
         <div class="flex gap-3 justify-center my-6">
             <button class="btn btn-start" id="start-btn" onclick="startTimer()">시작</button>
             <button class="btn btn-pause" id="pause-btn" onclick="pauseTimer()" style="display: none;">정지</button>
             <button class="btn btn-reset" id="reset-btn" onclick="resetTimer()">초기화</button>
         </div>
-
-        <!-- 타이머 시간 설정 부분 -->
         <div class="bg-gray-50 p-4 rounded-2xl border border-gray-200 flex flex-col items-center gap-2 w-full">
             <div class="text-gray-600 text-sm font-semibold">타이머 시간 설정</div>
-            
-            <!-- 분 단위 조절 및 입력 -->
             <div class="flex items-center gap-3 my-1">
                 <button class="adjust-btn" onclick="changeTime(-1)">-</button>
                 <div class="flex items-center gap-1">
@@ -120,25 +107,16 @@
     </div>
 
     <script>
-        // 전역 변수 선언
         let timerInterval = null;
         let isRunning = false;
         let selectedMinutes = 45;
         let timeLeft = 45 * 60;
-
-        // DOM 요소 참조
         let canvas = null;
         let ctx = null;
         let startBtn = null;
         let pauseBtn = null;
         let customInput = null;
-
-        // Web Audio API 오디오 컨텍스트
         let audioCtx = null;
-
-        /**
-         * 타이머 종료 시 알람 소리 재생 (도-미-솔-도)
-         */
         function playAlarmSound() {
             try {
                 if (!audioCtx) {
@@ -172,10 +150,6 @@
                 console.error("Audio playback failed:", e);
             }
         }
-
-        /**
-         * 캔버스에 시계 판 및 남은 시간(빨간 영역), 중앙 전자시계 그리기
-         */
         function drawClockFace() {
             if (!canvas || !ctx) return;
 
@@ -197,27 +171,20 @@
             const centerX = width / 2;
             const centerY = height / 2;
             const radius = 115;
-
-            // 1. 흰색 바탕 원형 시계판
             ctx.beginPath();
             ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
             ctx.fillStyle = '#FFFFFF';
             ctx.fill();
-
-            // 2. 빨간색 남은 시간 영역 (12시 방향부터 시계방향 채움)
             const fraction = Math.max(0, Math.min(1, timeLeft / 3600));
             const sweepAngle = fraction * 2 * Math.PI;
-
             if (sweepAngle > 0) {
                 ctx.beginPath();
                 ctx.moveTo(centerX, centerY);
                 ctx.arc(centerX, centerY, radius, -Math.PI / 2, -Math.PI / 2 + sweepAngle, false);
                 ctx.closePath();
-                ctx.fillStyle = '#E53E3E'; // 신인성 명확한 빨간색
+                ctx.fillStyle = '#E53E3E';
                 ctx.fill();
             }
-
-            // 3. 시계 눈금 및 숫자 (0, 5, 10, ... 55)
             const tickRadiusOuter = radius + 6;
             const tickRadiusInnerShort = radius + 1;
             const tickRadiusInnerLong = radius - 5;
@@ -254,7 +221,6 @@
                 }
             }
 
-            // 4. 중앙 전자시계 (MM:SS)
             const minutes = Math.floor(timeLeft / 60);
             const seconds = timeLeft % 60;
             const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
@@ -280,17 +246,9 @@
 
             ctx.restore();
         }
-
-        /**
-         * 화면 업데이트
-         */
         function updateDisplay() {
             drawClockFace();
         }
-
-        /**
-         * 타이머 시작
-         */
         function startTimer() {
             if (isRunning) return;
 
@@ -316,10 +274,6 @@
                 }
             }, 1000);
         }
-
-        /**
-         * 타이머 일시정지
-         */
         function pauseTimer() {
             if (!isRunning) return;
             clearInterval(timerInterval);
@@ -328,10 +282,6 @@
             startBtn.textContent = '이어서';
             pauseBtn.style.display = 'none';
         }
-
-        /**
-         * 타이머 초기화
-         */
         function resetTimer() {
             clearInterval(timerInterval);
             isRunning = false;
@@ -341,10 +291,6 @@
             pauseBtn.style.display = 'none';
             updateDisplay();
         }
-
-        /**
-         * 시간이 +, - 버튼으로 변경될 때
-         */
         function changeTime(delta) {
             let newMins = parseInt(customInput.value) + delta;
             if (isNaN(newMins) || newMins < 1) newMins = 1;
@@ -354,10 +300,6 @@
             customInput.value = newMins;
             resetTimer();
         }
-
-        /**
-         * 입력창에 직접 숫자를 입력했을 때
-         */
         function onCustomInputChange() {
             let val = parseInt(customInput.value);
             if (isNaN(val) || val < 1) val = 1;
@@ -368,7 +310,6 @@
             resetTimer();
         }
 
-        // 페이지 로드 시 DOM 요소 바인딩 및 초기 시계 그리기
         window.onload = function() {
             canvas = document.getElementById('timerCanvas');
             ctx = canvas ? canvas.getContext('2d') : null;
